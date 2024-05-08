@@ -76,7 +76,7 @@ def create_table_reviews(db: sqlalchemy.engine.base.Engine) -> None:
 
 @app.route('/')
 def index():
-    return 'Please navigate to /lodgings to use this API'
+    return 'Please navigate to /businesses or /reviews to use this API'
 
 def validate_business_post_put(request_json, attributes) -> bool:
     """Checks to see if the json in request has all required business attributes."""
@@ -88,10 +88,6 @@ def validate_business_post_put(request_json, attributes) -> bool:
 def generate_self_url(url, id) -> str:
     """Generates the url meant to be returned in the 'self' portion of the returned json dict."""
     return url +"/" + str(id)
-
-#def generate_self_url(url, attribute, id) -> str:
-#    """Generates the url meant to be returned in the 'self' portion of the returned json dict."""
-#    return url + attribute + str(id)
 
 @app.route('/' + BUSINESSES, methods=['POST'])
 def post_business():
