@@ -136,7 +136,7 @@ def get_businesses():
     url = request.url.split("/")
     # Check to see if final portion of URL is simply 'businesses'. If not, split the url further to get the limit and offset
     if url[-1] != BUSINESSES:
-        url = url[11:]
+        url = url[-1][11:]
         url = url.split("&")
         for param in url:
             if param[:6] == "offset":
@@ -153,15 +153,19 @@ def get_businesses():
             business = row._asdict()
             id = business["business_id"]
             business["self"] = generate_self_url(request.base_url, id)
+            business["id"] = business["business_id"]
+            del business["business_id"]
             businesses.append(business)
         response_dict = {"entries": businesses}
-        if len(business) == limit:
+        if len(businesses) == limit:
             offset += limit
             param_str = f"?offset={int(offset)}&limit={int(limit)}"
             next_url = request.url.split("?")
-            next_url[-1] = param_str
-            response_dict["next"] = "".join(next_url)
-
+            if len(next_url) > 1:
+                next_url[-1] = param_str
+                response_dict["next"] = "".join(next_url)
+            else:
+                response_dict["next"] = request.base_url + param_str
         return response_dict
 
 
@@ -269,7 +273,11 @@ def get_owners_businesses(id):
         business_list = list()
         for row in rows:
             business = row._asdict()
-            business["self"] = generate_self_url(request.base_url, id)
+            url = request.base_url.split("owners")
+            url[-1] = BUSINESSES + "/" + str(business["business_id"])
+            business["self"] = "".join(url)
+            business["id"] = business["business_id"]
+            del business["business_id"]
             business_list.append(business)
         return business_list
 
