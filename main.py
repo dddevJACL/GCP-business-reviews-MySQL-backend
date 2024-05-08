@@ -335,17 +335,21 @@ def post_review():
     except Exception as e:
         logger.exception(e)
         return ({'Error': 'Unable to create review'}, 500)
+    business_url = request.base_url.split(REVIEWS)
+    business_url[-1] = BUSINESSES + "/" + str(content["business_id"])
+    business_url = "".join(business_url)
     if has_review_text:
         return ({'id': review_id,
              'user_id': content['user_id'], 
-             'business_id': content['business_id'], 
+             'business': business_url, 
              'stars': content['stars'], 
              'review_text': content['review_text'], 
              'self': generate_self_url(request.base_url, review_id)}, 201)
     return ({'id': review_id,
              'user_id': content['user_id'], 
-             'business_id': content['business_id'], 
-             'stars': content['stars'], 
+             'business': business_url, 
+             'stars': content['stars'],
+             'review_text': '', 
              'self': generate_self_url(request.base_url, review_id)}, 201)
 
 
@@ -361,7 +365,14 @@ def get_review(id):
             return (generate_not_found_message(REVIEWS, REVIEW_ID), 404)
         else:
             review = row._asdict()
+            business_url = request.base_url.split(REVIEWS)
+            business_url[-1] = BUSINESSES + "/" + str(review["business_id"])
+            business_url = "".join(business_url)
+            review["business"] = business_url
+            del review["business_id"]
             review["self"] = request.base_url
+            review["id"] = review["review_id"]
+            del review["review_id"]
             return review
         
 
@@ -405,13 +416,21 @@ def put_review(id):
             conn.commit()
             
             row = row._asdict()
+            business_url = request.base_url.split(REVIEWS)
+            business_url[-1] = BUSINESSES + "/" + str(row["business_id"])
+            business_url = "".join(business_url)
             row["stars"] = content["stars"]
-            business_id = row["business_id"]
-            row["business"] = generate_self_url(request.base_url, business_id)
+            row["business"] = business_url
             del row["business_id"]
+            row["id"] = row["review_id"]
+            del row["review_id"]
             if has_review_text:
                 row["review_text"] = content["review_text"]
-            row["self"] = generate_self_url(request.base_url, id)
+            elif row["review_text"]:
+                row["review_text"] = row["review_text"]
+            else:
+                row["review_text"] = ''
+            row["self"] = request.base_url
             return row, 200
         
 
