@@ -85,10 +85,13 @@ def validate_business_post_put(request_json, attributes) -> bool:
             return False
     return True
 
-def generate_self_url(url, attribute, id) -> str:
+def generate_self_url(url, id) -> str:
     """Generates the url meant to be returned in the 'self' portion of the returned json dict."""
-    return url + attribute + str(id)
+    return url +"/" + str(id)
 
+#def generate_self_url(url, attribute, id) -> str:
+#    """Generates the url meant to be returned in the 'self' portion of the returned json dict."""
+#    return url + attribute + str(id)
 
 @app.route('/' + BUSINESSES, methods=['POST'])
 def post_business():
@@ -122,7 +125,7 @@ def post_business():
              'city': content['city'], 
              'state': content['state'], 
              'zip_code': content['zip_code'],
-             'self': generate_self_url(request.base_url, BUSINESSES, business_id)}, 201)
+             'self': generate_self_url(request.base_url, business_id)}, 201)
 
 
 
@@ -148,7 +151,8 @@ def get_businesses():
         rows = conn.execute(stmt, parameters={'limit': limit, 'offset': offset})
         for row in rows:
             business = row._asdict()
-            business["self"] = generate_self_url(request.base_url, BUSINESSES, id)
+            id = business["business_id"]
+            business["self"] = generate_self_url(request.base_url, id)
             businesses.append(business)
         response_dict = {"entries": businesses}
         if len(business) == limit:
@@ -163,6 +167,10 @@ def get_businesses():
 
 def generate_not_found_message(business_or_review: str, id_attribute: str) -> dict:
     """Generates a generic error not found message for with the given type and attribute"""
+    if business_or_review == "businesses":
+        business_or_review = "business"
+    else:
+        business_or_review = "review"
     not_found_str = f"No {business_or_review} with this {id_attribute} exists"
     return {"Error": not_found_str}
 
@@ -179,7 +187,9 @@ def get_business(id):
             return (generate_not_found_message(BUSINESSES, BUSINESS_ID), 404)
         else:
             business = row._asdict()
-            business["self"] = generate_self_url(request.base_url, BUSINESSES, id)
+            business["self"] = request.base_url
+            business["id"] = business["business_id"]
+            del business["business_id"]
             return business
 
 
@@ -223,7 +233,7 @@ def put_business(id):
              'city': content['city'], 
              'state': content['state'], 
              'zip_code': content['zip_code'],
-             'self': generate_self_url(request.base_url, BUSINESSES, id)}, 200)
+             'self': request.base_url}, 200)
 
 
 @app.route('/' + BUSINESSES + '/<int:id>', methods=['DELETE'])
@@ -248,7 +258,7 @@ def delete_business(id):
         return ('', 204)
 
 
-@app.route('/owners' + '/<int:id>' + BUSINESSES, methods=['GET'])
+@app.route('/owners' + '/<int:id>/' + BUSINESSES, methods=['GET'])
 def get_owners_businesses(id):
     """Return all businesses associated with the owner with the given id"""
     with db.connect() as conn:
@@ -259,7 +269,7 @@ def get_owners_businesses(id):
         business_list = list()
         for row in rows:
             business = row._asdict()
-            business["self"] = generate_self_url(request.base_url, BUSINESSES, id)
+            business["self"] = generate_self_url(request.base_url, id)
             business_list.append(business)
         return business_list
 
@@ -270,7 +280,7 @@ def post_review():
     content = request.get_json()
     valid_review = validate_business_post_put(content, REVIEWS_REQUIRED_ATTRIBUTES)
     has_review_text = False
-    if content["review_text"] is not None:
+    if "review_text" in content:
         has_review_text = True
     if not valid_review:
         return (POST_PUT_ERROR, 400)
@@ -290,8 +300,10 @@ def post_review():
             )
             row = conn.execute(stmt, parameters={'business_id': id}).one_or_none()
             if row is not None:
-                error_message = {"Error":  "You have already submitted a review for this business. You can update your previous review, or delete it and submit a new review"} 
-                return (error_message, 409)
+                review = row._asdict()
+                if review["user_id"] == content["user_id"]:
+                    error_message = {"Error":  "You have already submitted a review for this business. You can update your previous review, or delete it and submit a new review"} 
+                    return (error_message, 409)
             
             if has_review_text:
                 statement = sqlalchemy.text(
@@ -321,12 +333,12 @@ def post_review():
              'business_id': content['business_id'], 
              'stars': content['stars'], 
              'review_text': content['review_text'], 
-             'self': generate_self_url(request.base_url, REVIEWS, review_id)}, 201)
+             'self': generate_self_url(request.base_url, review_id)}, 201)
     return ({'id': review_id,
              'user_id': content['user_id'], 
              'business_id': content['business_id'], 
              'stars': content['stars'], 
-             'self': generate_self_url(request.base_url, REVIEWS, review_id)}, 201)
+             'self': generate_self_url(request.base_url, review_id)}, 201)
 
 
 @app.route('/' + REVIEWS + '/<int:id>', methods=['GET'])
@@ -340,9 +352,9 @@ def get_review(id):
         if row is None:
             return (generate_not_found_message(REVIEWS, REVIEW_ID), 404)
         else:
-            business = row._asdict()
-            business["self"] = generate_self_url(request.base_url, BUSINESSES, id)
-            return business
+            review = row._asdict()
+            review["self"] = request.base_url
+            return review
         
 
 @app.route('/' + REVIEWS + '/<int:id>', methods=['PUT'])
@@ -353,16 +365,16 @@ def put_review(id):
     review is returned along with a 200 status code.
     """
     content = request.get_json()
-    if content["stars"] is None:
+    if "stars" not in content:
         return (POST_PUT_ERROR, 400)
     
     has_review_text = False
-    if content["review_text"] is not None:
+    if "review_text" in content:
         has_review_text = True
 
     with db.connect() as conn:
         stmt = sqlalchemy.text(
-                'SELECT * FROM businesses WHERE review_id=:review_id'
+                'SELECT * FROM reviews WHERE review_id=:review_id'
             )
         row = conn.execute(stmt, parameters={'review_id': id}).one_or_none()
         if row is None:
@@ -387,11 +399,11 @@ def put_review(id):
             row = row._asdict()
             row["stars"] = content["stars"]
             business_id = row["business_id"]
-            row["business"] = generate_self_url(request.base_url, BUSINESSES, business_id)
+            row["business"] = generate_self_url(request.base_url, business_id)
             del row["business_id"]
             if has_review_text:
                 row["review_text"] = content["review_text"]
-            row["self"] = generate_self_url(request.base_url, REVIEWS, id)
+            row["self"] = generate_self_url(request.base_url, id)
             return row, 200
         
 
@@ -417,8 +429,8 @@ def delete_review(id):
         return ('', 204)
 
 
-@app.route('/users' + '/<int:id>' + REVIEWS, methods=['GET'])
-def get_owners_businesses(id):
+@app.route('/users' + '/<int:id>/' + REVIEWS, methods=['GET'])
+def get_users_reviews(id):
     """Return all reviews associated with the user with the given id"""
     with db.connect() as conn:
         stmt = sqlalchemy.text(
@@ -428,10 +440,16 @@ def get_owners_businesses(id):
         review_list = list()
         for row in rows:
             review = row._asdict()
-            review["self"] = generate_self_url(request.base_url, BUSINESSES, id)
-            business_id = row["business_id"]
-            row["business"] = generate_self_url(request.base_url, BUSINESSES, business_id)
-            del row["business_id"]
+            url = request.base_url.split("users")
+            url[-1] = REVIEWS + "/" + str(review["review_id"])
+            review["self"] = "".join(url)
+            business_id = review["business_id"]
+            url = request.base_url.split("users")
+            url[-1] = BUSINESSES + "/" + str(business_id)
+            review["business"] = "".join(url)
+            del review["business_id"]
+            review["id"] = review["review_id"]
+            del review["review_id"]
             review_list.append(review)
         return review_list
     
